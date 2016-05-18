@@ -155,7 +155,8 @@ harmonizeRasters<-function(x, newres=1,newextent=extent(-180, 180, -90, 90),time
     #reprojected/resampled and scaled raster
     #Optional - rescaling raster values between 0 and 1
     #this is just for plotting and the rescaling makes it easier for comparion between diff rasters
-    rProjS<- calc(rProj, function(x)log(x+1))
+    #rProjS<- calc(rProj, function(x)log(x+1))
+    rProjS<-rProj
     MIN<-cellStats(rProjS,min)
     MAX<-cellStats(rProjS,max)
     rProjS<- calc(rProjS, function(x)(x-MIN)/(MAX-MIN))
@@ -167,6 +168,6 @@ harmonizeRasters<-function(x, newres=1,newextent=extent(-180, 180, -90, 90),time
   }
   
   #Return new layer
-  return(rProjS)
+  return(rProj)
   
 }
