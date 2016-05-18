@@ -105,16 +105,23 @@ harmonizeRasters<-function(x, newres=1,newextent=extent(-180, 180, -90, 90),time
     dates<-as.character(sapply(names(r),function(x)substr(x,2,nchar(x))))
     dates<-gsub("\\.","/",dates)
     dates<-as.Date(dates)
-    years=years(dates)
-    r <- raster::subset(r, names(r)[years%in%timeperiod]) 
+    years=year(dates)
+    r <- subset(r, names(r)[years%in%timeperiod]) 
   }
   
   #Again, if the raster has multiple layers, do we just want a summary, i.e., the mean or trend over time
   if(!is.null(summary)){
     if(summary=="Trend"){
       time <- 1:nlayers(r)
-      fun <- function(x) { lm(x ~ time)$coefficients[2] }
+      
+      fun <- function(x) {
+        m <- NA
+        try( m <- lm(x ~nlayers)$coefficients[2] ,silent=T)
+        m
+      }
+      
       r <- calc(r, fun)
+      
     }else if(summary=="Mean"){
       r <- calc(r, mean)  
     }}
