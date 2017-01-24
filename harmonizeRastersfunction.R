@@ -11,13 +11,14 @@
 #Additional optional arguments:
 #newres = desired resolution in units of degrees or metres depending on type of projection
 #newextent = desired extent in degrees
-#timeperiod = desired time period if raster is a stack
+#timeperiod = desired time period if raster is a stack of many times points
 #newproj = desired CRS geographic or projection
-#these are examples:
-#newproj<-"+proj=eck4 +datum=WGS84"
-#newproj<-"+proj=moll +lon_0=0 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs"
+  #these are examples:  
+  #newproj<-"+proj=eck4 +datum=WGS84"
+  #newproj<-"+proj=moll +lon_0=0 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs"
 #plot = whether to plot the raster layers as part of the output
 #summary = whether to summarise multiple input rasters as the "Mean" or the "Trend"
+#aggregate = whether to aggregate the data by taking the mean of values ("Mean",default) or summing the values ("Sum")
 
 #default is to harmonize and/all raster layers/bands to a global extent, 1 degree resolution, 
 #in geographic projection
@@ -35,7 +36,7 @@ output<-stack(output)
 
 harmonizeRasters<-function(x, newres=1,newextent=extent(-180, 180, -90, 90),timeperiod=NULL, 
                            newproj="+proj=longlat +ellps=WGS84 +towgs84=0,0,0,0,0,0,0 +no_defs",
-                           plot=FALSE,summary=NULL){
+                           plot=FALSE,summary=NULL,aggregate="Mean"){
   
   #libraries we need
   require(raster)
@@ -109,7 +110,32 @@ harmonizeRasters<-function(x, newres=1,newextent=extent(-180, 180, -90, 90),time
     r <- subset(r, names(r)[years%in%timeperiod]) 
   }
   
-  #Again, if the raster has multiple layers, do we just want a summary, i.e., the mean or trend over time
+  #If the raster is on a finer resolution than that we are sampling it, we first need to aggregate it:
+  #first calculate the aggregation factor
+  
+  if(grepl("longlat",as.character(crs(r)))&grepl("longlat",newproj)){
+    agFactor<-round(newres/origRes)[1]
+  }else if(!grepl("longlat",as.character(crs(r)))&!grepl("longlat",newproj)){
+    agFactor<-round(newres/origRes)[1]
+  }else if (grepl("longlat",as.character(crs(r)))&!grepl("longlat",newproj)){
+    agFactor<-round(newres/origRes*100000)[1]#converting from degrees to metres
+  }else if (!grepl("longlat",as.character(crs(r)))&grepl("longlat",newproj)){
+    agFactor<-round(newres/(origRes/100000))[1]#converting from metres to degrees
+  }
+  
+  #are we to aggregating by sum or mean?
+  if(agFactor>1){
+    if(as.logical(aggregate=="Sum")){
+      r<-aggregate(r,fact=agFactor,fun=sum)
+    }
+    else if(as.logical(aggregate=="Mean")){
+      r<-aggregate(r,fact=agFactor,fun=median,na.rm=T)
+    }else{
+      r<-r
+    }
+  }
+  
+  #If the raster has multiple layers, do we just want a summary, i.e., the mean or trend over time
   if(!is.null(summary)){
     if(summary=="Trend"){
       time <- 1:nlayers(r)
