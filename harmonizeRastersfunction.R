@@ -61,9 +61,6 @@ harmonizeRasters<-function(x, newres=1,newextent=extent(-180, 180, -90, 90),time
   
   #project into whatever is the desired end projection resolution
   refProj<-projectRaster(ref, crs=newproj, res=newres)
-  #set dummy values again???
-  #values(ref)<-1#dummy value
-  refProj<-trim(refProj)  
   
   #Read in original raster layer
   
@@ -81,23 +78,11 @@ harmonizeRasters<-function(x, newres=1,newextent=extent(-180, 180, -90, 90),time
     r <- stack(temp2)
   }
   
-  
-  #Look at features of raster - not sure whether we want to print or record these somewhere????
-  #r is the original raster
-  #str(r)
-  #extent(r)
-  #crs(r)
-  #res(r)
-  
   #check whether we need to specific the crs projection of the raster (i..e, if R doesn"t)
   #automatically read it from the files  
   if(is.na(crs(r))){
     projection(r)=myproj
   }
-  
-  #Dealing with NA values - maybe need to do something here????
-  #raster::NAvalue(r) <- -1000 #make sure we don't have any super small NAs
-  
   
   #If the original raster has multiple time points, subset to time period of interest
   #I have only tried this with a couple so may not work with others at the moment
@@ -106,21 +91,21 @@ harmonizeRasters<-function(x, newres=1,newextent=extent(-180, 180, -90, 90),time
     dates<-as.character(sapply(names(r),function(x)substr(x,2,nchar(x))))
     dates<-gsub("\\.","/",dates)
     dates<-as.Date(dates)
-    years=year(dates)
-    r <- subset(r, names(r)[years%in%timeperiod]) 
+    myyears=year(dates)
+    r <- subset(r, names(r)[myyears%in%timeperiod]) 
   }
   
   #If the raster is on a finer resolution than that we are sampling it, we first need to aggregate it:
   #first calculate the aggregation factor
   
   if(grepl("longlat",as.character(crs(r)))&grepl("longlat",newproj)){
-    agFactor<-round(newres/origRes)[1]
+    agFactor<-floor(newres/origRes)[1]
   }else if(!grepl("longlat",as.character(crs(r)))&!grepl("longlat",newproj)){
-    agFactor<-round(newres/origRes)[1]
+    agFactor<-floor(newres/origRes)[1]
   }else if (grepl("longlat",as.character(crs(r)))&!grepl("longlat",newproj)){
-    agFactor<-round(newres/origRes*100000)[1]#converting from degrees to metres
+    agFactor<-floor(newres/origRes*100000)[1]#converting from degrees to metres
   }else if (!grepl("longlat",as.character(crs(r)))&grepl("longlat",newproj)){
-    agFactor<-round(newres/(origRes/100000))[1]#converting from metres to degrees
+    agFactor<-floor(newres/(origRes/100000))[1]#converting from metres to degrees
   }
   
   #are we to aggregating by sum or mean?
@@ -136,17 +121,54 @@ harmonizeRasters<-function(x, newres=1,newextent=extent(-180, 180, -90, 90),time
   }
   
   #If the raster has multiple layers, do we just want a summary, i.e., the mean or trend over time
+  #do we want to calculate a summary variable e.g. a mean or a trend
   if(!is.null(summary)){
-    if(summary=="Trend"){
-      time <- 1:nlayers(r)
+    if(summary=="trend"){#trend, i.e. regression coefficient of a year effect
+      myyears=myyears[myyears%in%timeperiod]
       
+      require(spatial.tools)
+      rStack<-brickstack_to_raster_list(r)
+      
+      #get average raster value per year
+      rMean<-stack(llply(unique(myyears),function(x){
+        rTemp <- stack(rStack[myyears%in%x])
+        rTemp <- calc(rTemp,fun=function(x)mean(x))
+        return(rTemp)
+      }))
+      
+      uniqueYears<-unique(myyears)
+      
+      #get trend
       fun <- function(x) {
         m <- NA
-        try( m <- lm(x ~nlayers)$coefficients[2] ,silent=T)
+        try( m <- lm(x ~uniqueYears)$coefficients[2] ,silent=T)
         m
       }
       
-      r <- calc(r, fun)
+      r<- calc(rMean, fun)
+    }else if(as.logisummary=="T-stat")){#t-statistic of the test
+      myyears=myyears[myyears%in%timeperiod]
+
+      require(spatial.tools)
+      rStack<-brickstack_to_raster_list(r)
+      
+      #get average per year
+      rMean<-stack(llply(unique(myyears),function(x){
+        rTemp <- stack(rStack[myyears%in%x])
+        rTemp <- calc(rTemp,fun=function(x)mean(x))
+        return(rTemp)
+      }))
+      
+      uniqueYears<-unique(myyears)
+      
+      getT<-function(x){
+        if(all(!is.na(x))){
+          summary(lm(x~uniqueYears))$coefficients[2,3]
+        }else{
+          NA
+        }}
+      
+      r<- calc(rMean, getT)
       
     }else if(summary=="Mean"){
       r <- calc(r, mean)  
@@ -160,40 +182,11 @@ harmonizeRasters<-function(x, newres=1,newextent=extent(-180, 180, -90, 90),time
   
   #Project raster onto the reference grid of raster
   rProj <- projectRaster(r, refProj) 
-  
-  #Plotting all rasters
-  if (plot==TRUE){
-    require(ggplot2)
-    require(rasterVis)
-    
-    #original raster
-    gplot(r) + geom_tile(aes(fill = value)) +
-      scale_fill_gradient(low = 'white', high = 'blue') +
-      coord_equal()+theme_bw()+ggtitle(name)
-    ggsave(paste(name,"png",sep="."))
-    
-    #reprojected/resampled raster
-    gplot(rProj) + geom_tile(aes(fill = value)) +
-      scale_fill_gradient(low = 'white', high = 'blue') +
-      coord_equal()+theme_bw()+ggtitle(paste0(name,"Proj"))
-    ggsave(paste(paste0(name,"Proj"),"png",sep="."))
-    
-    #reprojected/resampled and scaled raster
-    #Optional - rescaling raster values between 0 and 1
-    #this is just for plotting and the rescaling makes it easier for comparion between diff rasters
-    #rProjS<- calc(rProj, function(x)log(x+1))
-    rProjS<-rProj
-    MIN<-cellStats(rProjS,min)
-    MAX<-cellStats(rProjS,max)
-    rProjS<- calc(rProjS, function(x)(x-MIN)/(MAX-MIN))
-    
-    gplot(rProjS) + geom_tile(aes(fill = value)) +
-      scale_fill_gradient(low = 'white', high = 'blue') +
-      coord_equal()+theme_bw()+ggtitle(paste0(name,"ProjS"))
-    ggsave(paste(paste0(name,"ProjS"),"png",sep="."))
-  }
-  
-  #Return new layer
-  return(rProj)
-  
+  rProj<-mask(rProj,refProj)
+
+  #Convert raster into data frames
+  rDF<-as.data.frame(rProj,xy=T)
+  names(rDF)[3]<-"Value"
+  rDF$Type<-name
+  return(rDF)
 }
