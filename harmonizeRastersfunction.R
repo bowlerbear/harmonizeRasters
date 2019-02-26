@@ -95,26 +95,21 @@ harmonizeRasters<-function(x, newres=1,newextent=extent(-180, 180, -90, 90),time
     r <- subset(r, names(r)[myyears%in%timeperiod]) 
   }
   
-  #If the raster is on a finer resolution than that we are sampling it, we first need to aggregate it:
-  #first calculate the aggregation factor
-  
-  if(grepl("longlat",as.character(crs(r)))&grepl("longlat",newproj)){
-    agFactor<-floor(newres/origRes)[1]
-  }else if(!grepl("longlat",as.character(crs(r)))&!grepl("longlat",newproj)){
-    agFactor<-floor(newres/origRes)[1]
-  }else if (grepl("longlat",as.character(crs(r)))&!grepl("longlat",newproj)){
-    agFactor<-floor(newres/origRes*100000)[1]#converting from degrees to metres
-  }else if (!grepl("longlat",as.character(crs(r)))&grepl("longlat",newproj)){
-    agFactor<-floor(newres/(origRes/100000))[1]#converting from metres to degrees
+  #if in lat,lon reproject into the new proj that is in m
+  if(grepl("longlat",myproj)){
+    r <- projectRaster(r, crs=newproj)
   }
   
+  #If the raster is on a finer resolution than that we are sampling it, we first need to aggregate it:
   #are we to aggregating by sum or mean?
+  origRes<-res(r)
+  agFactor<-floor(newres/origRes[1])
   if(agFactor>1){
     if(as.logical(aggregate=="Sum")){
       r<-aggregate(r,fact=agFactor,fun=sum)
     }
     else if(as.logical(aggregate=="Mean")){
-      r<-aggregate(r,fact=agFactor,fun=median,na.rm=T)
+      r<-aggregate(r,fact=agFactor,fun=mean)
     }else{
       r<-r
     }
