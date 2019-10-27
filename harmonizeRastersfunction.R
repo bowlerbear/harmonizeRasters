@@ -78,14 +78,13 @@ harmonizeRasters<-function(x, newres=1,newextent=extent(-180, 180, -90, 90),time
     r <- stack(temp2)
   }
   
-  #check whether we need to specific the crs projection of the raster (i..e, if R doesn"t)
-  #automatically read it from the files  
+  #check whether we need to specific the crs projection of the raster (i.e., if R doesn't
+  #automatically read it from the files)  
   if(is.na(crs(r))){
     projection(r)=myproj
   }
   
   #If the original raster has multiple time points, subset to time period of interest
-  #I have only tried this with a couple so may not work with others at the moment
   if(!is.null(timeperiod)){
     require(lubridate)
     dates<-as.character(sapply(names(r),function(x)substr(x,2,nchar(x))))
@@ -106,10 +105,10 @@ harmonizeRasters<-function(x, newres=1,newextent=extent(-180, 180, -90, 90),time
   agFactor<-floor(newres/origRes[1])
   if(agFactor>1){
     if(as.logical(aggregate=="Sum")){
-      r<-aggregate(r,fact=agFactor,fun=sum)
+      r<-aggregate(r,fact=agFactor,fun=sum,na.rm=T)
     }
     else if(as.logical(aggregate=="Mean")){
-      r<-aggregate(r,fact=agFactor,fun=mean)
+      r<-aggregate(r,fact=agFactor,fun=mean,na.rm=T)
     }else{
       r<-r
     }
@@ -141,7 +140,8 @@ harmonizeRasters<-function(x, newres=1,newextent=extent(-180, 180, -90, 90),time
       }
       
       r<- calc(rMean, fun)
-    }else if(as.logisummary=="T-stat")){#t-statistic of the test
+      
+    }else if(as.logical(summary=="T-stat")){ #t-statistic of the test
       myyears=myyears[myyears%in%timeperiod]
 
       require(spatial.tools)
@@ -173,7 +173,6 @@ harmonizeRasters<-function(x, newres=1,newextent=extent(-180, 180, -90, 90),time
   #Clip raster to extent of reference grid
   extentGrid <- projectExtent(ref, crs(r))
   r<-crop(r,extentGrid)
-  
   
   #Project raster onto the reference grid of raster
   rProj <- projectRaster(r, refProj) 
